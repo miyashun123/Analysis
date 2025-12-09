@@ -1,6 +1,7 @@
 program kaiseki
     implicit none !暗黙の型宣言禁止
 
+
     !物性値等の定数部　
     real(8), parameter :: m_r = 0.0809833 !ローター質量 [kg]
     real(8), parameter :: Cp_r = 921.0 !ローターの比熱 [J/kg·K]
