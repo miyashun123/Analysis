@@ -24,7 +24,7 @@ program kaiseki
     real(8) :: X_inProcess = 0.0204 !処理側流入絶対湿度 [kg/kgDA]
     real(8) :: X_inRegenerate = 0.0160 !再生側流入絶対湿度 [Kg/kgDA]
 
-    real(8) :: operation_time = 10.0 !稼働時間 [s]
+    real(8) :: operation_time = 2 !稼働時間 [s]
     integer, parameter :: DivisionNumber = 360 !ローター分割数
 
     !初期値
@@ -61,13 +61,15 @@ program kaiseki
 
     time_n = 3600.0 / (dble(DivisionNumber) * omega) !１ステップあたりの時間[s]
     cal_count = int(operation_time / time_n) !稼働時間分のステップ数
-    Xs_assumed = X_s !仮のXr (一番最初のローターのシリカゲル表面の絶対湿度)
+    Xs_assumed = X_s !仮のXs (一番最初のローターのシリカゲル表面の絶対湿度)
 
     do j = 1, cal_count 
-
+        print*, "timecount:", j
+        print *, T_r_list
+        
         !n分割分それぞれの計算
         do i = 1, DivisionNumber
-
+            print*, "position:", i
             remainder = mod(i - 1, DivisionNumber)
             !余りが0からDivisionNumberの半分まではqa = qa_process(処理空気)、 それ以外は qa = qa_regenerate(再生空気)
             if (remainder < DivisionNumber / 2) then
@@ -89,7 +91,10 @@ program kaiseki
             do while(.not. complete) 
                 !無限ループ対策
                 iter = iter + 1
-                if (iter > 100) exit
+                if (iter > 100) then
+                    exit
+                    print *, "Convergence failed at time count", j, "position", i
+                endif
 
                 Tao_cal = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * Tr_estimate) ) / (rho * Cp_a * qa + h_sa * A_sa) !仮のTaoを算出
                 Xao_cal = (rho * qa * X_in + k * A_sa * Xs_assumed)  / (rho * qa + k * A_sa) !仮のXaoを決める
@@ -102,9 +107,15 @@ program kaiseki
 
                     !無限ループ対策            
                     iter_polanyi = iter_polanyi + 1
-                    if (iter_polanyi > 100) exit 
+                    if (iter_polanyi > 100) then
+                        print *, "Convergence failed in the Xr search. time count", j, "position", i
+                        exit 
+                    endif
 
                     e = 28.964 * Xs_assumed * 1013.25 / (Xs_assumed * 28.964 + 18.015) !空気の水蒸気分圧
+                    if (e < 0.0d0) then
+                        e = 0.0d0
+                    endif
                     es = 6.1078 * ( 10.0**(7.5*Tr_estimate / (Tr_estimate+ 237.3) ) ) !飽和水蒸気分圧
 
                     if (es > 0.0d0) then
@@ -133,7 +144,7 @@ program kaiseki
                     Xs_new = Xs_assumed - Polanyi / dPolanyi !Xsの更新式
                     Xs_assumed = Xs_new
                     
-                    !収束確認用 write(*, *)"カウント",iter_polanyi, "Xs_assumed", Xs_assumed, "polanyi", polanyi
+                    !print *, "計算回数",iter_polanyi, "Xs_assumed", Xs_assumed, "polanyi", polanyi, "dPolanyi:", dPolanyi
                     X_ao = (rho * qa * X_in + k * A_sa * Xs_new)  / (rho * qa + k * A_sa)!仮のXaoを決める
                 enddo
                 X_s = Xs_assumed
@@ -175,9 +186,13 @@ program kaiseki
                 Tao_regenerate_sum = Tao_regenerate_sum + T_ao_list_temporary(i)
             endif
         enddo
+        Xao_process_sum = Xao_process_sum / (DivisionNumber / 2)
+        Tao_process_sum = Tao_process_sum / (DivisionNumber / 2)
+        Xao_regenerate_sum = Xao_regenerate_sum / (DivisionNumber / 2)
+        Tao_regenerate_sum = Tao_regenerate_sum / (DivisionNumber / 2)
 
-        write(*, *) J * time_n, "秒", "処理側出口絶対湿度Xao:", Xao_process_sum, "再生側出口絶対湿度Xao:",&
-        Xao_regenerate_sum, "処理側出口温度Tao:", Tao_process_sum, "再生側出口温度Tao:", Tao_regenerate_sum
+        !write(*, *) J * time_n, "秒", "処理側出口絶対湿度Xao:", Xao_process_sum, "再生側出口絶対湿度Xao:",&
+        !Xao_regenerate_sum, "処理側出口温度Tao:", Tao_process_sum, "再生側出口温度Tao:", Tao_regenerate_sum
 
         X_ao_list = cshift(X_ao_list_temporary, shift=-1)
         X_s_list = cshift(X_s_list_temporary, shift=-1)
