@@ -7,8 +7,8 @@ program kaiseki
     real(8), parameter :: Cp_r = 921.0 !ローターの比熱 [J/kg·K]
     real(8), parameter :: Cp_a = 1006.0 !空気比熱 [J/kg·K]
     real(8), parameter :: A_sa = 0.74467 !空気とローターが接する表面積 [m^2]
-    real(8), parameter :: h_sa = 62.67 !熱伝達率 [W/m^2·K]
-    real(8), parameter :: k = 0.0623 !物質移動係数 [kg/m^2·s(kg/kgDA)]
+    real(8), parameter :: h_sa = 100 !熱伝達率 [W/m^2·K]
+    real(8), parameter :: k = 0.099404 !物質移動係数 [kg/m^2·s(kg/kgDA)]
     real(8), parameter :: L = 2253293.2 !蒸発潜熱 [J/kg]
     real(8), parameter :: rho = 1.206 !空気密度 [kg/m^3]
     real(8), parameter :: Cad_0 = 1.0 !使っていない
@@ -44,7 +44,7 @@ program kaiseki
     real(8) :: error = 1.0e-8
     real(8) :: polanyi
     real(8) :: qa, e, dRHs, dPolanyi, dP,de, dP_content, dXao, P_content
-    real(8) :: Tr_estimate,Tr_cal, Tao_cal, Xao_cal, Xs_new, Xs_assumed
+    real(8) :: Tr_estimate,Tr_cal, Xao_cal, Xs_new, Xs_assumed
     real(8) :: X_ao_list(DivisionNumber), X_s_list(DivisionNumber), T_ao_list(DivisionNumber)
     real(8) :: X_ao_list_temporary(DivisionNumber), T_r_list_temporary(DivisionNumber),&
     X_s_list_temporary(DivisionNumber), T_ao_list_temporary(DivisionNumber), P_old_temporary(DivisionNumber)
@@ -64,12 +64,12 @@ program kaiseki
     Xs_assumed = X_s !仮のXs (一番最初のローターのシリカゲル表面の絶対湿度)
 
     do j = 1, cal_count 
-        print*, "timecount:", j
+        !print*, "timecount:", j
         print *, T_r_list
         
         !n分割分それぞれの計算
         do i = 1, DivisionNumber
-            print*, "position:", i
+            !print*, "position:", i
             remainder = mod(i - 1, DivisionNumber)
             !余りが0からDivisionNumberの半分まではqa = qa_process(処理空気)、 それ以外は qa = qa_regenerate(再生空気)
             if (remainder < DivisionNumber / 2) then
@@ -84,7 +84,7 @@ program kaiseki
 
             complete = .false. !while文の終了判定を初期化
 
-            Tr_estimate = T_r_list(i) !仮のTrを仮定、一ステップ前の確定温度を使う
+            Tr_estimate = T_r_list(i) !仮のTrを仮定、一タイムステップ前の確定温度を使う
             iter = 0 !ステップが次に進む時に無限ループ対策に使用しているカウンターをリセットする。
             P_step_start = P_old(i)
 
@@ -96,15 +96,12 @@ program kaiseki
                     print *, "Convergence failed at time count", j, "position", i
                 endif
 
-                Tao_cal = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * Tr_estimate) ) / (rho * Cp_a * qa + h_sa * A_sa) !仮のTaoを算出
-                Xao_cal = (rho * qa * X_in + k * A_sa * Xs_assumed)  / (rho * qa + k * A_sa) !仮のXaoを決める
-
                 Polanyi = 100.0 !Polanyi の初期値を100にしておく
                 iter_polanyi = 0
 
                 !仮のXrを決める
                 do while(abs(Polanyi) > error)
-
+                    Xao_cal = (rho * qa * X_in + k * A_sa * Xs_assumed)  / (rho * qa + k * A_sa) !仮のXaoを決める
                     !無限ループ対策            
                     iter_polanyi = iter_polanyi + 1
                     if (iter_polanyi > 100) then
@@ -116,6 +113,7 @@ program kaiseki
                     if (e < 0.0d0) then
                         e = 0.0d0
                     endif
+
                     es = 6.1078 * ( 10.0**(7.5*Tr_estimate / (Tr_estimate+ 237.3) ) ) !飽和水蒸気分圧
 
                     if (es > 0.0d0) then
@@ -141,17 +139,18 @@ program kaiseki
                     
                     dPolanyi = (m_r * dP / time_n ) - k * A_sa * dXao + k * A_sa !Polanyiの微分
 
-                    Xs_new = Xs_assumed - Polanyi / dPolanyi !Xsの更新式
-                    Xs_assumed = Xs_new
+                    Xs_new = Xs_assumed - 0.5 * Polanyi / dPolanyi !Xsの更新式 0.5は振れ幅を小さくするための係数
+                    Xs_assumed = Xs_new !新しい候補となったXs(Xs_new)をXs_assumedとし、次の計算で使う。
                     
                     !print *, "計算回数",iter_polanyi, "Xs_assumed", Xs_assumed, "polanyi", polanyi, "dPolanyi:", dPolanyi
-                    X_ao = (rho * qa * X_in + k * A_sa * Xs_new)  / (rho * qa + k * A_sa)!仮のXaoを決める
                 enddo
                 X_s = Xs_assumed
+                X_ao = (rho * qa * X_in + k * A_sa * Xs_new)  / (rho * qa + k * A_sa)!いったん確定したXsからのXaoを決める
 
+                T_ao = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * Tr_estimate) ) / (rho * Cp_a * qa + h_sa * A_sa) !確定のTao
                 !次は一番最初の式からTrを算出
                 Tr_cal = (m_r * Cp_r / time_n * T_r + h_sa * A_sa * T_ao + k * A_sa * L * (X_ao - Xs_new)) / &
-                (m_r * Cp_r / time_n + h_sa *A_sa) 
+                (m_r * Cp_r / time_n + h_sa * A_sa)  !ここのTr、このままだったらおかしくないか？　ずっとTrの初期値25だよ　あれでも、
 
                 if (abs(Tr_estimate - Tr_cal) > error) then
                     !write(*, *) "カウント", iter, "誤差",abs(Tr_estimate - Tr_cal), "判定", complete           
@@ -163,8 +162,8 @@ program kaiseki
                 endif
             enddo
             P_old_temporary(i) = P_current
-            
-            T_ao = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * T_r) ) / (rho * Cp_a * qa + h_sa * A_sa)
+
+            T_ao = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * T_r) ) / (rho * Cp_a * qa + h_sa * A_sa) !確定のTao
             !write(*, *)"ステップ:",i, "X_ao:",X_ao, " X_s:", X_s," T_r",T_r," T_ao", T_ao
             X_ao_list_temporary(i) = X_ao
             X_s_list_temporary(i) = X_s
