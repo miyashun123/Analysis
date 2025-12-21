@@ -33,6 +33,7 @@ program kaiseki
     real(8) :: X_s = 0.007422933 !シリカゲル表面絶対湿度 [kg/kgDA]
     real(8) :: T_r = 25.0 !ローター温度 [℃]
     real(8) :: T_r_list(DivisionNumber) = 25.0
+    real(8) :: X_s_list(DivisionNumber) = 0.007422933
     real(8) :: T_ao = 25.0 !出口温度 [℃]
     real(8) :: P_old(DivisionNumber) = 0.05 !
     real(8) :: P_current, P_step_start
@@ -45,7 +46,7 @@ program kaiseki
     real(8) :: polanyi
     real(8) :: qa, e, dRHs, dPolanyi, dP,de, dP_content, dXao, P_content
     real(8) :: Tr_estimate,Tr_cal, Xao_cal, Xs_new, Xs_assumed
-    real(8) :: X_ao_list(DivisionNumber), X_s_list(DivisionNumber), T_ao_list(DivisionNumber)
+    real(8) :: X_ao_list(DivisionNumber), T_ao_list(DivisionNumber)
     real(8) :: X_ao_list_temporary(DivisionNumber), T_r_list_temporary(DivisionNumber),&
     X_s_list_temporary(DivisionNumber), T_ao_list_temporary(DivisionNumber), P_old_temporary(DivisionNumber)
     Logical complete !while文終了判定
@@ -61,14 +62,15 @@ program kaiseki
 
     time_n = 3600.0 / (dble(DivisionNumber) * omega) !１ステップあたりの時間[s]
     cal_count = int(operation_time / time_n) !稼働時間分のステップ数
-    Xs_assumed = X_s_list(i) !仮のXs (ひとつ前のローターのシリカゲル表面の絶対湿度)
 
     do j = 1, cal_count 
         !print*, "timecount:", j
-        print *, T_r_list
+        !print *, T_r_list
         
         !n分割分それぞれの計算
-        do i = 1, DivisionNumber
+        do i = 1, 2
+
+            Xs_assumed = X_s_list(i)!仮のXs (ひとつ前のローターのシリカゲル表面の絶対湿度)
             !print*, "position:", i
             remainder = mod(i - 1, DivisionNumber)
             !余りが0からDivisionNumberの半分まではqa = qa_process(処理空気)、 それ以外は qa = qa_regenerate(再生空気)
@@ -101,6 +103,7 @@ program kaiseki
 
                 !仮のXrを決める
                 do while(abs(Polanyi) > error)
+
                     Xao_cal = (rho * qa * X_in + k * A_sa * Xs_assumed)  / (rho * qa + k * A_sa) !仮のXaoを決める
                     !無限ループ対策            
                     iter_polanyi = iter_polanyi + 1
@@ -110,12 +113,13 @@ program kaiseki
                     endif
 
                     e = 28.964 * Xs_assumed * 1013.25 / (Xs_assumed * 28.964 + 18.015) !空気の水蒸気分圧
+                    print *, "e:", e
                     if (e < 0.0d0) then
                         e = 0.0d0
                     endif
 
                     es = 6.1078 * ( 10.0**(7.5*Tr_estimate / (Tr_estimate+ 237.3) ) ) !飽和水蒸気分圧
-
+                    print *, "es:", es
                     if (es > 0.0d0) then
                         RHs = 100.0d0 * e / es
                     else           
@@ -147,7 +151,8 @@ program kaiseki
                     Xs_assumed = Xs_new !新しい候補となったXs(Xs_new)をXs_assumedとし、次の計算で使う。
                     
                     
-                    !print *, "計算回数",iter_polanyi, "Xs_assumed", Xs_assumed, "polanyi", polanyi, "dPolanyi:", dPolanyi
+                    !print *, "計算回数",iter_polanyi, "Xs_assumed", Xs_assumed, "polanyi", polanyi,&
+                    !"dPolanyi:", dPolanyi, "RHs:", RHs, "e:", e, "es"
                 enddo
                 X_s = Xs_assumed
                 X_ao = (rho * qa * X_in + k * A_sa * Xs_new)  / (rho * qa + k * A_sa)!いったん確定したXsからのXaoを決める
@@ -155,7 +160,7 @@ program kaiseki
                 T_ao = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * Tr_estimate) ) / (rho * Cp_a * qa + h_sa * A_sa) !確定のTao
                 !次は一番最初の式からTrを算出
                 Tr_cal = (m_r * Cp_r / time_n * T_r_list(i) + h_sa * A_sa * T_ao + k * A_sa * L * (X_ao - Xs_new)) / &
-                (m_r * Cp_r / time_n + h_sa * A_sa)  !ここのTr、このままだったらおかしくない?
+                (m_r * Cp_r / time_n + h_sa * A_sa) 
 
                 if (abs(Tr_estimate - Tr_cal) > error) then
                     !write(*, *) "カウント", iter, "誤差",abs(Tr_estimate - Tr_cal), "判定", complete           
