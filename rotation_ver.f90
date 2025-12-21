@@ -24,7 +24,7 @@ program kaiseki
     real(8) :: X_inProcess = 0.0204 !処理側流入絶対湿度 [kg/kgDA]
     real(8) :: X_inRegenerate = 0.0160 !再生側流入絶対湿度 [Kg/kgDA]
 
-    real(8) :: operation_time = 2 !稼働時間 [s]
+    real(8) :: operation_time = 0.5 !稼働時間 [s]
     integer, parameter :: DivisionNumber = 360 !ローター分割数
 
     !初期値
@@ -61,7 +61,7 @@ program kaiseki
 
     time_n = 3600.0 / (dble(DivisionNumber) * omega) !１ステップあたりの時間[s]
     cal_count = int(operation_time / time_n) !稼働時間分のステップ数
-    Xs_assumed = X_s !仮のXs (一番最初のローターのシリカゲル表面の絶対湿度)
+    Xs_assumed = X_s_list(i) !仮のXs (ひとつ前のローターのシリカゲル表面の絶対湿度)
 
     do j = 1, cal_count 
         !print*, "timecount:", j
@@ -140,7 +140,12 @@ program kaiseki
                     dPolanyi = (m_r * dP / time_n ) - k * A_sa * dXao + k * A_sa !Polanyiの微分
 
                     Xs_new = Xs_assumed - 0.5 * Polanyi / dPolanyi !Xsの更新式 0.5は振れ幅を小さくするための係数
+                    !Xsガードレール
+                    if (Xs_new < 0.0000001) then
+                        Xs_new  = 0.0000001
+                    endif
                     Xs_assumed = Xs_new !新しい候補となったXs(Xs_new)をXs_assumedとし、次の計算で使う。
+                    
                     
                     !print *, "計算回数",iter_polanyi, "Xs_assumed", Xs_assumed, "polanyi", polanyi, "dPolanyi:", dPolanyi
                 enddo
@@ -149,8 +154,8 @@ program kaiseki
 
                 T_ao = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * Tr_estimate) ) / (rho * Cp_a * qa + h_sa * A_sa) !確定のTao
                 !次は一番最初の式からTrを算出
-                Tr_cal = (m_r * Cp_r / time_n * T_r + h_sa * A_sa * T_ao + k * A_sa * L * (X_ao - Xs_new)) / &
-                (m_r * Cp_r / time_n + h_sa * A_sa)  !ここのTr、このままだったらおかしくないか？　ずっとTrの初期値25だよ　あれでも、
+                Tr_cal = (m_r * Cp_r / time_n * T_r_list(i) + h_sa * A_sa * T_ao + k * A_sa * L * (X_ao - Xs_new)) / &
+                (m_r * Cp_r / time_n + h_sa * A_sa)  !ここのTr、このままだったらおかしくない?
 
                 if (abs(Tr_estimate - Tr_cal) > error) then
                     !write(*, *) "カウント", iter, "誤差",abs(Tr_estimate - Tr_cal), "判定", complete           
