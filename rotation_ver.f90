@@ -3,12 +3,12 @@ program kaiseki
 
 
     !物性値等の定数部　
-    real(8), parameter :: m_r = 0.0809833 !ローター質量 [kg]
+    real(8), parameter :: m_s = 0.060 !シリカゲルの質量 [kg]
     real(8), parameter :: Cp_r = 921.0 !ローターの比熱 [J/kg·K]
     real(8), parameter :: Cp_a = 1006.0 !空気比熱 [J/kg·K]
     real(8), parameter :: A_sa = 0.74467 !空気とローターが接する表面積 [m^2]
-    real(8), parameter :: h_sa = 100 !熱伝達率 [W/m^2·K]
-    real(8), parameter :: k = 0.099404 !物質移動係数 [kg/m^2·s(kg/kgDA)]
+    real(8), parameter :: h_sa = 62.67 !熱伝達率 [W/m^2·K]
+    real(8), parameter :: k = 0.0623 !物質移動係数 [kg/m^2·s(kg/kgDA)]
     real(8), parameter :: L = 2253293.2 !蒸発潜熱 [J/kg]
     real(8), parameter :: rho = 1.206 !空気密度 [kg/m^3]
     real(8), parameter :: Cad_0 = 1.0 !使っていない
@@ -24,7 +24,7 @@ program kaiseki
     real(8) :: X_inProcess = 0.0204 !処理側流入絶対湿度 [kg/kgDA]
     real(8) :: X_inRegenerate = 0.0160 !再生側流入絶対湿度 [Kg/kgDA]
 
-    real(8) :: operation_time = 0.5 !稼働時間 [s]
+    real(8) :: operation_time = 3600 !稼働時間 [s]
     integer, parameter :: DivisionNumber = 360 !ローター分割数
 
     !初期値
@@ -64,14 +64,14 @@ program kaiseki
     cal_count = int(operation_time / time_n) !稼働時間分のステップ数
 
     do j = 1, cal_count 
-        !print*, "timecount:", j
-        !print *, T_r_list
+        !確認用print*, "timecount:", j
+        !確認用print *, T_r_list
         
         !n分割分それぞれの計算
-        do i = 1, 2
+        do i = 1, DivisionNumber
 
             Xs_assumed = X_s_list(i)!仮のXs (ひとつ前のローターのシリカゲル表面の絶対湿度)
-            !print*, "position:", i
+            !確認用print*, "position:", i
             remainder = mod(i - 1, DivisionNumber)
             !余りが0からDivisionNumberの半分まではqa = qa_process(処理空気)、 それ以外は qa = qa_regenerate(再生空気)
             if (remainder < DivisionNumber / 2) then
@@ -113,13 +113,11 @@ program kaiseki
                     endif
 
                     e = 28.964 * Xs_assumed * 1013.25 / (Xs_assumed * 28.964 + 18.015) !空気の水蒸気分圧
-                    print *, "e:", e
                     if (e < 0.0d0) then
                         e = 0.0d0
                     endif
 
                     es = 6.1078 * ( 10.0**(7.5*Tr_estimate / (Tr_estimate+ 237.3) ) ) !飽和水蒸気分圧
-                    print *, "es:", es
                     if (es > 0.0d0) then
                         RHs = 100.0d0 * e / es
                     else           
@@ -139,9 +137,9 @@ program kaiseki
                     dXao = k * A_sa / (rho * qa + k * A_sa)
 
                     P_current = P0 * exp( -kp * ( ((273.16 + Tr_estimate)/Vm)**2.0 ) * log(100.0/RHs)**2.0 )
-                    Polanyi = m_r * (P_current - P_step_start) / time_n - k * A_sa * (Xao_cal - Xs_assumed)
+                    Polanyi = m_s * (P_current - P_step_start) / time_n - k * A_sa * (Xao_cal - Xs_assumed)
                     
-                    dPolanyi = (m_r * dP / time_n ) - k * A_sa * dXao + k * A_sa !Polanyiの微分
+                    dPolanyi = (m_s * dP / time_n ) - k * A_sa * dXao + k * A_sa !Polanyiの微分
 
                     Xs_new = Xs_assumed - 0.5 * Polanyi / dPolanyi !Xsの更新式 0.5は振れ幅を小さくするための係数
                     !Xsガードレール
@@ -159,29 +157,29 @@ program kaiseki
 
                 T_ao = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * Tr_estimate) ) / (rho * Cp_a * qa + h_sa * A_sa) !確定のTao
                 !次は一番最初の式からTrを算出
-                Tr_cal = (m_r * Cp_r / time_n * T_r_list(i) + h_sa * A_sa * T_ao + k * A_sa * L * (X_ao - Xs_new)) / &
-                (m_r * Cp_r / time_n + h_sa * A_sa) 
+                Tr_cal = (m_s * Cp_r / time_n * T_r_list(i) + h_sa * A_sa * T_ao + k * A_sa * L * (X_ao - Xs_new)) / &
+                (m_s * Cp_r / time_n + h_sa * A_sa) 
 
                 if (abs(Tr_estimate - Tr_cal) > error) then
-                    !write(*, *) "カウント", iter, "誤差",abs(Tr_estimate - Tr_cal), "判定", complete           
+                    !確認用write(*, *) "カウント", iter, "誤差",abs(Tr_estimate - Tr_cal), "判定", complete           
                     Tr_estimate = Tr_cal
                 else
                     T_r = Tr_cal
                     complete = .true.
-                    !write(*, *) "カウント", iter, "誤差",abs(Tr_estimate - Tr_cal), "判定", complete
+                    !確認用write(*, *) "カウント", iter, "誤差",abs(Tr_estimate - Tr_cal), "判定", complete
                 endif
             enddo
             P_old_temporary(i) = P_current
 
             T_ao = ( (rho * Cp_a * qa * Tai) + (h_sa * A_sa * T_r) ) / (rho * Cp_a * qa + h_sa * A_sa) !確定のTao
-            !write(*, *)"ステップ:",i, "X_ao:",X_ao, " X_s:", X_s," T_r",T_r," T_ao", T_ao
+            !確認用write(*, *)"ステップ:",i, "X_ao:",X_ao, " X_s:", X_s," T_r",T_r," T_ao", T_ao
             X_ao_list_temporary(i) = X_ao
             X_s_list_temporary(i) = X_s
             T_r_list_temporary(i) = T_r
             T_ao_list_temporary(i) = T_ao
         enddo
 
-        !あるタイムステップの出口温度湿度の値 配列のすべての値の平均値をとればよい
+        !あるタイムステップの出口温度湿度の値 配列のすべての値の平均値をとる
         Xao_process_sum = 0
         Xao_regenerate_sum = 0
         Tao_process_sum = 0
@@ -200,8 +198,7 @@ program kaiseki
         Xao_regenerate_sum = Xao_regenerate_sum / (DivisionNumber / 2)
         Tao_regenerate_sum = Tao_regenerate_sum / (DivisionNumber / 2)
 
-        !write(*, *) J * time_n, "秒", "処理側出口絶対湿度Xao:", Xao_process_sum, "再生側出口絶対湿度Xao:",&
-        !Xao_regenerate_sum, "処理側出口温度Tao:", Tao_process_sum, "再生側出口温度Tao:", Tao_regenerate_sum
+        write(*, *) J * time_n,",", Xao_process_sum, ",", Xao_regenerate_sum, ",", Tao_process_sum, ",", Tao_regenerate_sum
 
         X_ao_list = cshift(X_ao_list_temporary, shift=-1)
         X_s_list = cshift(X_s_list_temporary, shift=-1)
