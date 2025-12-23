@@ -1,14 +1,17 @@
 program kaiseki
     implicit none !暗黙の型宣言禁止
 
+    integer, parameter :: DivisionNumber = 360 !ローター分割数 
+    real(8), parameter :: m = 29.15 !ローター質量 [kg]
+    real(8), parameter :: A = 268.083 !ローター全体の表面積 [m^2]
 
     !物性値等の定数部　
-    real(8), parameter :: m_s = 0.060 !シリカゲルの質量 [kg]
+    real(8), parameter :: m_s = 0.8 * m / dble(DivisionNumber) !シリカゲルの質量 [kg]
+    real(8), parameter :: A_sa = A / dble(DivisionNumber) !空気とローターが接する表面積 [m^2]
     real(8), parameter :: Cp_r = 921.0 !ローターの比熱 [J/kg·K]
     real(8), parameter :: Cp_a = 1006.0 !空気比熱 [J/kg·K]
-    real(8), parameter :: A_sa = 0.74467 !空気とローターが接する表面積 [m^2]
-    real(8), parameter :: h_sa = 62.67 !熱伝達率 [W/m^2·K]
-    real(8), parameter :: k = 0.0623 !物質移動係数 [kg/m^2·s(kg/kgDA)]
+    real(8), parameter :: h_sa = 120 !熱伝達率 [W/m^2·K]
+    real(8), parameter :: k = 0.120 !物質移動係数 [kg/m^2·s(kg/kgDA)]
     real(8), parameter :: L = 2253293.2 !蒸発潜熱 [J/kg]
     real(8), parameter :: rho = 1.206 !空気密度 [kg/m^3]
     real(8), parameter :: Cad_0 = 1.0 !使っていない
@@ -25,7 +28,7 @@ program kaiseki
     real(8) :: X_inRegenerate = 0.0160 !再生側流入絶対湿度 [Kg/kgDA]
 
     real(8) :: operation_time = 3600 !稼働時間 [s]
-    integer, parameter :: DivisionNumber = 360 !ローター分割数
+    
 
     !初期値
     real(8) :: X_in
@@ -36,27 +39,27 @@ program kaiseki
     real(8) :: X_s_list(DivisionNumber) = 0.007422933
     real(8) :: T_ao = 25.0 !出口温度 [℃]
     real(8) :: P_old(DivisionNumber) = 0.05 !
-    real(8) :: P_current, P_step_start
+    real(8) :: P_current, P_step_start 
     real(8) :: P0 = 1.0 
     real(8) :: RHs = 37.72545 !シリカゲル表面相対湿度 [%]
-    real(8) :: es 
-    real(8) :: Tai
+    real(8) :: es  
+    real(8) :: Tai 
     real(8) :: time_n !n分割した際の1ステップの時間 [s]
     real(8) :: error = 1.0e-8
-    real(8) :: polanyi
+    real(8) :: polanyi 
     real(8) :: qa, e, dRHs, dPolanyi, dP,de, dP_content, dXao, P_content
     real(8) :: Tr_estimate,Tr_cal, Xao_cal, Xs_new, Xs_assumed
     real(8) :: X_ao_list(DivisionNumber), T_ao_list(DivisionNumber)
     real(8) :: X_ao_list_temporary(DivisionNumber), T_r_list_temporary(DivisionNumber),&
     X_s_list_temporary(DivisionNumber), T_ao_list_temporary(DivisionNumber), P_old_temporary(DivisionNumber)
-    Logical complete !while文終了判定
+    Logical complete !while文終了判定 
 
-    !その他の変数
+    !その他の変数 
     integer :: iter_polanyi, iter !無限ループ対策　カウンター
     integer :: j, i, remainder
-    integer :: cal_count
-    real(8) :: Xao_process_sum = 0
-    real(8) :: Xao_regenerate_sum = 0
+    integer :: cal_count 
+    real(8) :: Xao_process_sum = 0 
+    real(8) :: Xao_regenerate_sum = 0 
     real(8) :: Tao_process_sum = 0
     real(8) :: Tao_regenerate_sum = 0
 
@@ -75,11 +78,11 @@ program kaiseki
             remainder = mod(i - 1, DivisionNumber)
             !余りが0からDivisionNumberの半分まではqa = qa_process(処理空気)、 それ以外は qa = qa_regenerate(再生空気)
             if (remainder < DivisionNumber / 2) then
-                qa = (qa_process / 3600.0) / ( dble(DivisionNumber) / 2 )
+                qa = (qa_process / 3600.0) / ( dble(DivisionNumber) / 2.0 )
                 X_in = X_inProcess
                 Tai = Tai_process
             else
-                qa = (qa_regenerate / 3600.0) / ( dble(DivisionNumber) / 2 )
+                qa = (qa_regenerate / 3600.0) / ( dble(DivisionNumber) / 2.0 )
                 X_in = X_inRegenerate
                 Tai = Tai_regenerate
             endif
